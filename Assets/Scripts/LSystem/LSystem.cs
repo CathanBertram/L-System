@@ -1,42 +1,11 @@
-using System.Collections;
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 
-public class LSystem : MonoBehaviour
+[CreateAssetMenu(fileName = "LSystem", menuName = "LSystem/Create LSystem", order = 1)]
+public class LSystem : ScriptableObject
 {
-    [SerializeField] private string axiom;
-    [SerializeField] private int iterations;
-    [SerializeField] private int angle;
-    [SerializeField] private float length;
-    [ReadOnly][SerializeField] string current;
-    public string Current => current;
-
-    public void Generate()
-    {
-        current = axiom;
-        for (int i = 0; i < iterations; i++)
-        {
-            current = Iterate(current);
-        }
-    }
-
-    private string Iterate(string curr)
-    {
-        return "";
-    }
-}
-[CustomEditor(typeof(LSystem))]
-public class LSystemEditor : Editor
-{
-    public override void OnInspectorGUI()
-    {
-        DrawDefaultInspector();
-        var myTarg = (LSystem)target;
-
-        if (GUILayout.Button("Generate"))
-        {
-            myTarg.Generate();
-        }
-    }
+    public string axiom;
+    public float angle;
+    public List<Rule> rules;
+    public char[] ignoreChars;
 }
