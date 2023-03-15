@@ -66,21 +66,12 @@ public class test : MonoBehaviour
                 var offset = vertices.Count - circles[i].Count;
 
                 //Loop through each vertex for end faces
-                for (int j = offset; j < circles[i].Count + offset; j++)
+                for (int j = offset + 1; j < circles[i].Count + offset; j++)
                 {
-                    //Add Connecting Triangle
-                    if (j == offset)
-                    {
-                        triangles.Add(j);
-                        triangles.Add(circles.Count + offset);
-                        triangles.Add(0);
-                        continue;
-                    }
-
                     //Add Triangle For Each Vertex
                     triangles.Add(j - 1);
                     triangles.Add(j);
-                    triangles.Add(0);
+                    triangles.Add(offset);
                 }              
             }
             else
@@ -117,26 +108,19 @@ public class test : MonoBehaviour
 
                 //If final ring, add outer face
                 if (i == circles.Count - 1)
-                {                    
-                    for (int j = 0; j < circles[i].Count; j++)
+                {
+                    for (int j = offset + 1; j < circles[i].Count + offset; j++)
                     {
-                        //Add Connecting Triangle
-                        if (j == 0)
-                        {
-                            triangles.Add(offset);
-                            triangles.Add(circles.Count + offset);
-                            triangles.Add(offset + 1);
-                            continue;
-                        }
 
                         //Add Triangle For Each Vertex
                         triangles.Add(offset);
-                        triangles.Add(offset + j);
-                        triangles.Add(offset + j - 1);
+                        triangles.Add(j);
+                        triangles.Add(j - 1);
                     }
                 }
             }
         }
+
         mesh.Clear();
         mesh.vertices = vertices.ToArray(); 
         mesh.triangles = triangles.ToArray();
@@ -162,14 +146,14 @@ public class test : MonoBehaviour
     {
         if (circles == null) return;
 
-        foreach (var circle in circles)
-        {
-            for (int i = 1; i < circle.Count; i++)
-            { 
-                Debug.DrawLine(circle[i - 1], circle[i]);
-            }
-            //Debug.DrawLine(circle[0], circle[circle.Count - 1]);
-        }
+        //foreach (var circle in circles)
+        //{
+        //    for (int i = 1; i < circle.Count; i++)
+        //    { 
+        //        Debug.DrawLine(circle[i - 1], circle[i]);
+        //    }
+        //    //Debug.DrawLine(circle[0], circle[circle.Count - 1]);
+        //}
     }
 }
 
