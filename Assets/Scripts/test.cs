@@ -136,7 +136,7 @@ public class test : MonoBehaviour
 
         //Get Direction With Circle Rotation      
         var point = dir * (radius * curScale) + c;
-        point = Quaternion.LookRotation(t.forward, t.up) * (point - c) + c;
+        point = Quaternion.LookRotation(t.forward, Vector3.up) * (point - c) + c;
 
         // Scale Points And Add To List
         p.Add(point);
