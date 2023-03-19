@@ -75,99 +75,103 @@ public class Generator : MonoBehaviour
     [SerializeField] private float lengthScale = 1;
     private float curLengthScale;
 
-    public bool test;
+    [SerializeField] private EasingType lengthScaleEasingType;
+    [SerializeField] private EasingType scaleEasingType;
+
+    [SerializeField] private float endScale;
+
     public void GenerateMesh()
     {
-        curScale = scale;
-        curLengthScale = lengthScale;
         GenerateLSystem();
-        if(!test)
-            GeneratePath();
+
+        //GeneratePath();
 
         var meshPaths = new List<List<Circle>>();
-        if (test)
+
+        #region generateCirclePath
+        meshPaths.Add(new List<Circle>());
+        curScale = scale; 
+        curLengthScale = lengthScale;
+
+        int curPath = 0;
+        Vector3 dir = Vector3.up;
+        Vector3 curPos = Vector3.zero;
+
+        Stack<MeshPathState> previousPath = new Stack<MeshPathState>();
+        meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+
+        foreach (var item in iteratedSystem)
         {
-            #region generateCirclePath
-            meshPaths.Add(new List<Circle>());
+            curScale = Easing.Ease(scaleEasingType, scale, endScale, );
 
-            int curPath = 0;
-            Vector3 dir = Vector3.up;
-            Vector3 curPos = Vector3.zero;
-
-            Stack<MeshPathState> previousPath = new Stack<MeshPathState>();
-            meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
-
-            foreach (var item in iteratedSystem)
+            curScale *= scaleModifier;
+            curLengthScale *= lengthScaleModifier;
+            switch (item)
             {
-                curScale *= scaleModifier;
-                curLengthScale *= lengthScaleModifier;
-                switch (item)
-                {
-                    case 'F':
-                        //Move Forward
-                        curPos += dir * (baseLength * curLengthScale);
-                        meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
-                        break;
-                    case '+':
-                        //Turn Left
-                        dir = Quaternion.AngleAxis(baseAngle, Vector3.left) * dir;
-                        break;
-                    case '-':
-                        //Turn Right
-                        dir = Quaternion.AngleAxis(-baseAngle, Vector3.left) * dir;
-                        break;
-                    case '&':
-                        //Pitch Down
-                        dir = Quaternion.AngleAxis(baseAngle, Vector3.down) * dir;
-                        break;
-                    case '^':
-                        //Pitch Up
-                        dir = Quaternion.AngleAxis(-baseAngle, Vector3.down) * dir;
-                        break;
-                    case '\\':
-                        //Roll Left
-                        dir = Quaternion.AngleAxis(-baseAngle, Vector3.forward) * dir;
-                        break;
-                    case '/':
-                        //Roll Right
-                        dir = Quaternion.AngleAxis(baseAngle, Vector3.forward) * dir;
-                        break;
-                    case '|':
-                        // Turn 180
-                        dir = Quaternion.AngleAxis(180, Vector3.forward) * dir;
-                        break;
-                    case '[':
-                        // Start Path
-                        MeshPathState state = new MeshPathState(curPath, new MeshPathNode(curPos, dir, curPath), curScale, lengthScale);
-                        previousPath.Push(state);
-                        meshPaths.Add(new List<Circle>());
-                        curPath = meshPaths.Count - 1;
+                case 'F':
+                    //Move Forward
+                    curPos += dir * (baseLength * curLengthScale);
+                    meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    break;
+                case '+':
+                    //Turn Left
+                    dir = Quaternion.AngleAxis(baseAngle, Vector3.left) * dir;
+                    break;
+                case '-':
+                    //Turn Right
+                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.left) * dir;
+                    break;
+                case '&':
+                    //Pitch Down
+                    dir = Quaternion.AngleAxis(baseAngle, Vector3.down) * dir;
+                    break;
+                case '^':
+                    //Pitch Up
+                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.down) * dir;
+                    break;
+                case '\\':
+                    //Roll Left
+                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.forward) * dir;
+                    break;
+                case '/':
+                    //Roll Right
+                    dir = Quaternion.AngleAxis(baseAngle, Vector3.forward) * dir;
+                    break;
+                case '|':
+                    // Turn 180
+                    dir = Quaternion.AngleAxis(180, Vector3.forward) * dir;
+                    break;
+                case '[':
+                    // Start Path
+                    MeshPathState state = new MeshPathState(curPath, new MeshPathNode(curPos, dir, curPath), curScale, lengthScale);
+                    previousPath.Push(state);
+                    meshPaths.Add(new List<Circle>());
+                    curPath = meshPaths.Count - 1;
 
-                        curScale *= pathScaleModifier;
+                    curScale *= pathScaleModifier;
 
-                        meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
-                        break;
-                    case ']':
-                        // End Path
-                        MeshPathState s = previousPath.Pop();
-                        curPath = s.Index;
-                        dir = s.MeshPathNode.direction;
-                        curPos = s.MeshPathNode.center;
-                        curScale = s.Scale;
-                        curLengthScale = s.LengthScale; 
-                        break;
-                    default:
-                        if (ignoreCharacters.Contains(item)) break;
+                    meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    break;
+                case ']':
+                    // End Path
+                    MeshPathState s = previousPath.Pop();
+                    curPath = s.Index;
+                    dir = s.MeshPathNode.direction;
+                    curPos = s.MeshPathNode.center;
+                    curScale = s.Scale;
+                    curLengthScale = s.LengthScale; 
+                    break;
+                default:
+                    if (ignoreCharacters.Contains(item)) break;
 
-                        curPos += dir * baseLength;
-                        meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
-                        break;
-                }
+                    curPos += dir * baseLength;
+                    meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    break;
             }
-            #endregion
         }
-        if (!test)
-            GetCircles(meshPaths);       
+        #endregion
+
+        //GetCircles(meshPaths);       
 
         if (meshFilter.sharedMesh == null) meshFilter.sharedMesh = new Mesh();
 
@@ -280,6 +284,25 @@ public class Generator : MonoBehaviour
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
     }
+
+    private Circle GetBaseCircle(Vector3 direction, Vector3 center, float scale, int pathIndex)
+    { 
+        Circle c =  new Circle();
+        c.direction = direction;
+        c.center = center;
+        c.pathIndex = pathIndex;
+        return c;
+    }
+
+    private void GetCirclePoints(Circle c)
+    {
+        for (int i = 0; i < meshResolution; i++)
+        {
+            GetPoint(c.points, (float)i / ((float)meshResolution), c.center, c.direction);
+        }
+    }    
+
+
     private Circle GetCircle(Vector3 direction, Vector3 center, float scale, int pathIndex)
     {
         Circle c = new Circle();
