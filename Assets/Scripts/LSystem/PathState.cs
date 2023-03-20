@@ -15,16 +15,18 @@ public class PathState
 
 public class MeshPathState
 {
-    public int Index { get; private set; }
+    public int PathIndex { get; private set; }
     public MeshPathNode MeshPathNode { get; private set; }
     public float Scale { get; private set; }
     public float LengthScale { get; private set; }
+   public int Index { get; private set; }
 
-    public MeshPathState(int index, MeshPathNode node, float scale, float lengthScale)
+    public MeshPathState(int pathIndex, MeshPathNode node, float scale, float lengthScale, int index)
     {
-        Index = index;
+        PathIndex = pathIndex;
         MeshPathNode = node;
         Scale = scale;
         LengthScale = lengthScale;
+        Index = index;  
     }
 }

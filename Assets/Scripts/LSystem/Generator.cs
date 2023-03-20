@@ -79,7 +79,7 @@ public class Generator : MonoBehaviour
     [SerializeField] private EasingType scaleEasingType;
 
     [SerializeField] private float endScale;
-
+    float pathStartScale;
     public void GenerateMesh()
     {
         GenerateLSystem();
@@ -87,31 +87,79 @@ public class Generator : MonoBehaviour
         //GeneratePath();
 
         var meshPaths = new List<List<Circle>>();
+        var tempPaths = new List<List<Circle>>();
 
         #region generateCirclePath
         meshPaths.Add(new List<Circle>());
-        curScale = scale; 
+        tempPaths.Add(new List<Circle>());
+        curScale = scale;
+        pathStartScale = curScale;
         curLengthScale = lengthScale;
 
         int curPath = 0;
         Vector3 dir = Vector3.up;
         Vector3 curPos = Vector3.zero;
 
+        float endScaleModifier = 1 / (scale / endScale);
+
+        Stack<int> tempStack = new Stack<int>();
+        tempPaths[curPath].Add(new Circle());
+        foreach (var item in iteratedSystem)
+        {
+            switch (item)
+            {
+                case 'F':
+                    tempPaths[curPath].Add(new Circle());
+                    break;
+                case '+':
+                    break;
+                case '-':
+                    break;
+                case '&':
+                    break;
+                case '^':
+                    break;
+                case '\\':
+                    break;
+                case '/':
+                    break;
+                case '|':
+                    break;
+                case '[':
+                    // Start Path
+                    tempStack.Push(curPath);
+                    tempPaths.Add(new List<Circle>());
+                    curPath = tempPaths.Count - 1;
+                    tempPaths[curPath].Add(new Circle());
+                    break;
+                case ']':
+                    // End Path                  
+                    curPath = tempStack.Pop();
+                    break;
+                default:
+                    tempPaths[curPath].Add(new Circle());
+                    break;
+            }
+        }
+
+        curPath = 0;
+        int index = 1;
+
         Stack<MeshPathState> previousPath = new Stack<MeshPathState>();
         meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
 
         foreach (var item in iteratedSystem)
         {
-            curScale = Easing.Ease(scaleEasingType, scale, endScale, );
-
-            curScale *= scaleModifier;
-            curLengthScale *= lengthScaleModifier;
+            curScale = Easing.Ease(scaleEasingType, pathStartScale * endScaleModifier, pathStartScale, 1.0f - (float)index / tempPaths[curPath].Count);
+            Debug.Log($"{curScale} {1 - (float)index / tempPaths[curPath].Count}");
+            //curLengthScale *= lengthScaleModifier;
             switch (item)
             {
                 case 'F':
                     //Move Forward
                     curPos += dir * (baseLength * curLengthScale);
                     meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    index++;
                     break;
                 case '+':
                     //Turn Left
@@ -143,32 +191,36 @@ public class Generator : MonoBehaviour
                     break;
                 case '[':
                     // Start Path
-                    MeshPathState state = new MeshPathState(curPath, new MeshPathNode(curPos, dir, curPath), curScale, lengthScale);
+                    MeshPathState state = new MeshPathState(curPath, new MeshPathNode(curPos, dir, curPath), pathStartScale, lengthScale, index);
                     previousPath.Push(state);
                     meshPaths.Add(new List<Circle>());
                     curPath = meshPaths.Count - 1;
 
                     curScale *= pathScaleModifier;
-
+                    pathStartScale = curScale;
+                    index = 1;
                     meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
                     break;
                 case ']':
                     // End Path
                     MeshPathState s = previousPath.Pop();
-                    curPath = s.Index;
+                    curPath = s.PathIndex;
                     dir = s.MeshPathNode.direction;
                     curPos = s.MeshPathNode.center;
-                    curScale = s.Scale;
-                    curLengthScale = s.LengthScale; 
+                    pathStartScale = s.Scale;
+                    curLengthScale = s.LengthScale;
+                    index = s.Index;                   
                     break;
                 default:
                     if (ignoreCharacters.Contains(item)) break;
 
-                    curPos += dir * baseLength;
+                    curPos += dir * (baseLength * curLengthScale);
                     meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    index++;
                     break;
             }
         }
+
         #endregion
 
         //GetCircles(meshPaths);       
@@ -283,25 +335,8 @@ public class Generator : MonoBehaviour
         mesh.Clear();
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
+        mesh.RecalculateNormals();
     }
-
-    private Circle GetBaseCircle(Vector3 direction, Vector3 center, float scale, int pathIndex)
-    { 
-        Circle c =  new Circle();
-        c.direction = direction;
-        c.center = center;
-        c.pathIndex = pathIndex;
-        return c;
-    }
-
-    private void GetCirclePoints(Circle c)
-    {
-        for (int i = 0; i < meshResolution; i++)
-        {
-            GetPoint(c.points, (float)i / ((float)meshResolution), c.center, c.direction);
-        }
-    }    
-
 
     private Circle GetCircle(Vector3 direction, Vector3 center, float scale, int pathIndex)
     {
@@ -317,6 +352,19 @@ public class Generator : MonoBehaviour
         c.center = center;
         c.pathIndex = pathIndex;
         return c;
+    }
+    private void SetCircle(Circle c, Vector3 direction, Vector3 center, float scale, int pathIndex)
+    {
+        c.points = new List<Vector3>();
+
+        for (int i = 0; i < meshResolution; i++)
+        {
+            GetPoint(c.points, (float)i / ((float)meshResolution), center, direction);
+        }
+
+        c.direction = direction;
+        c.center = center;
+        c.pathIndex = pathIndex;
     }
     private void GetCircles(List<List<Circle>> meshPaths)
     {
@@ -358,7 +406,6 @@ public class Generator : MonoBehaviour
         else
         {
             var left = Vector3.Cross(dir, Vector3.forward).normalized;
-            Debug.Log(dir + " " + " " + left + " " + direction);
             if (left != Vector3.zero)
             {
                 dir = Vector3.Cross(left, direction).normalized;
