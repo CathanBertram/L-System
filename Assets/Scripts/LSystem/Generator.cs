@@ -6,6 +6,7 @@ using static UnityEngine.EventSystems.EventTrigger;
 using UnityEngine.UIElements;
 using UnityEditor.ShaderGraph.Internal;
 using System.Runtime.CompilerServices;
+using Mono.Cecil.Cil;
 
 public class Generator : MonoBehaviour
 {
@@ -16,6 +17,20 @@ public class Generator : MonoBehaviour
     [SerializeField] private float baseLength;
     private float baseAngle;
     private char[] ignoreCharacters;
+
+    [SerializeField] private int meshResolution;
+    [SerializeField] private float radius;
+    [SerializeField] private float pathScaleModifier;
+    [SerializeField] private MeshFilter meshFilter;
+    private float curScale = 1;
+    [SerializeField] private float lengthScale = 1;
+
+    [SerializeField] private EasingType scaleEasingType;
+
+    [SerializeField] private float endRadiusScale;
+
+    [SerializeField] private float maxAngleOffset;
+    [SerializeField] private int seed;
 
     public void InitDictionary()
     {
@@ -64,43 +79,32 @@ public class Generator : MonoBehaviour
             Iterate();
         }
     }
-    [SerializeField] private int meshResolution;
-    [SerializeField] private float scale;
-    [SerializeField] private float radius;
-    [SerializeField] private float scaleModifier;
-    [SerializeField] private float pathScaleModifier;
-    [SerializeField] private float lengthScaleModifier;
-    [SerializeField] private MeshFilter meshFilter;
-    private float curScale = 1;
-    [SerializeField] private float lengthScale = 1;
-    private float curLengthScale;
-
-    [SerializeField] private EasingType lengthScaleEasingType;
-    [SerializeField] private EasingType scaleEasingType;
-
-    [SerializeField] private float endScale;
+    
     float pathStartScale;
+    [SerializeField] private float minRotateAngle = 0;
+    [SerializeField] private float maxRotateAngle = 180;
+    [SerializeField] private float upCorrectAngle = 60;
     public void GenerateMesh()
     {
         GenerateLSystem();
 
         //GeneratePath();
-
+        var dotValue = Easing.Linear(-1, 1, (upCorrectAngle + 180) / 360);
         var meshPaths = new List<List<Circle>>();
         var tempPaths = new List<List<Circle>>();
+        System.Random random = new System.Random(seed);
 
         #region generateCirclePath
         meshPaths.Add(new List<Circle>());
         tempPaths.Add(new List<Circle>());
-        curScale = scale;
+        curScale = radius;
         pathStartScale = curScale;
-        curLengthScale = lengthScale;
 
         int curPath = 0;
         Vector3 dir = Vector3.up;
         Vector3 curPos = Vector3.zero;
 
-        float endScaleModifier = 1 / (scale / endScale);
+        float endScaleModifier = 1 / (radius / endRadiusScale);
 
         Stack<int> tempStack = new Stack<int>();
         tempPaths[curPath].Add(new Circle());
@@ -151,23 +155,24 @@ public class Generator : MonoBehaviour
         foreach (var item in iteratedSystem)
         {
             curScale = Easing.Ease(scaleEasingType, pathStartScale * endScaleModifier, pathStartScale, 1.0f - (float)index / tempPaths[curPath].Count);
-            Debug.Log($"{curScale} {1 - (float)index / tempPaths[curPath].Count}");
             //curLengthScale *= lengthScaleModifier;
             switch (item)
             {
                 case 'F':
                     //Move Forward
-                    curPos += dir * (baseLength * curLengthScale);
+                    curPos += dir * (baseLength * lengthScale);
                     meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
                     index++;
                     break;
                 case '+':
                     //Turn Left
-                    dir = Quaternion.AngleAxis(baseAngle, Vector3.left) * dir;
+                    var t = Quaternion.AngleAxis(Easing.Linear(minRotateAngle, maxRotateAngle, (float)random.NextDouble()), Vector3.up);
+                    dir = Quaternion.AngleAxis(baseAngle + Easing.Linear(-maxAngleOffset, maxAngleOffset, (float)random.NextDouble()), Vector3.left) * t * dir;
                     break;
                 case '-':
                     //Turn Right
-                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.left) * dir;
+                    var te = Quaternion.AngleAxis(-Easing.Linear(minRotateAngle, maxRotateAngle, (float)random.NextDouble()), Vector3.up);
+                    dir = Quaternion.AngleAxis(-baseAngle + Easing.Linear(-maxAngleOffset, maxAngleOffset, (float)random.NextDouble()), Vector3.left) * te * dir;
                     break;
                 case '&':
                     //Pitch Down
@@ -208,16 +213,21 @@ public class Generator : MonoBehaviour
                     dir = s.MeshPathNode.direction;
                     curPos = s.MeshPathNode.center;
                     pathStartScale = s.Scale;
-                    curLengthScale = s.LengthScale;
+                    lengthScale = s.LengthScale;
                     index = s.Index;                   
                     break;
                 default:
                     if (ignoreCharacters.Contains(item)) break;
 
-                    curPos += dir * (baseLength * curLengthScale);
+                    curPos += dir * (baseLength * lengthScale);
                     meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
                     index++;
                     break;
+            }
+            var dot = Vector3.Dot(dir, Vector3.up);
+            if (dot < dotValue)
+            {
+                dir = Quaternion.Euler(dir) * Vector3.Lerp(dir, Vector3.up, (float)random.NextDouble());
             }
         }
 
@@ -286,7 +296,6 @@ public class Generator : MonoBehaviour
                         } 
                     }
 
-
                     //Loop through each circle to add faces
                     for (int k = 0; k < curCount - 1; k++)
                     {
@@ -294,7 +303,6 @@ public class Generator : MonoBehaviour
                         if (kOffset >= curCount)
                             kOffset -= curCount;
 
-                        kOffset = k;
                         if (k == 0)
                         {
                             triangles.Add(offset + curCount - 1);
@@ -337,7 +345,10 @@ public class Generator : MonoBehaviour
         mesh.triangles = triangles.ToArray();
         mesh.RecalculateNormals();
     }
-
+    public void RandomizeSeed()
+    {
+        seed = Mathf.RoundToInt(Random.Range(int.MinValue, int.MaxValue));
+    }
     private Circle GetCircle(Vector3 direction, Vector3 center, float scale, int pathIndex)
     {
         Circle c = new Circle();
@@ -352,38 +363,6 @@ public class Generator : MonoBehaviour
         c.center = center;
         c.pathIndex = pathIndex;
         return c;
-    }
-    private void SetCircle(Circle c, Vector3 direction, Vector3 center, float scale, int pathIndex)
-    {
-        c.points = new List<Vector3>();
-
-        for (int i = 0; i < meshResolution; i++)
-        {
-            GetPoint(c.points, (float)i / ((float)meshResolution), center, direction);
-        }
-
-        c.direction = direction;
-        c.center = center;
-        c.pathIndex = pathIndex;
-    }
-    private void GetCircles(List<List<Circle>> meshPaths)
-    {
-        for (int k = 0; k < paths.Count; k++)
-        {
-            meshPaths.Add(new List<Circle>());            
-            for (int j = 0; j < paths[k].Count; j++)
-            {
-                meshPaths[k].Add(new Circle());
-                meshPaths[k][j].points = new List<Vector3>();
-                for (int i = 0; i < meshResolution; i++)
-                {
-                    GetPoint(meshPaths[k][j].points, (float)i / ((float)meshResolution), paths[k][j]);
-                }
-                meshPaths[k][j].direction = paths[k][j].direction;
-                meshPaths[k][j].center = paths[k][j].point;
-            }
-        }
-
     }
     public void GetPoint(List<Vector3> p, float i, Vector3 center, Vector3 direction)
     {
@@ -459,7 +438,7 @@ public class Generator : MonoBehaviour
     public void GeneratePath()
     {
         GenerateLSystem();
-
+        System.Random random = new System.Random(seed);
         paths = new List<List<PathNode>>();
         paths.Add(new List<PathNode>());
 
@@ -482,11 +461,11 @@ public class Generator : MonoBehaviour
                     break;
                 case '+':
                     //Turn Left
-                    dir = Quaternion.AngleAxis(baseAngle, Vector3.left) * dir;
+                    dir = Quaternion.AngleAxis(baseAngle + Easing.Linear(-maxAngleOffset, maxAngleOffset, (float)random.NextDouble()), Vector3.left) * dir;
                     break;
                 case '-':
                     //Turn Right
-                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.left) * dir;
+                    dir = Quaternion.AngleAxis(-baseAngle + Easing.Linear(-maxAngleOffset, maxAngleOffset, (float)random.NextDouble()), Vector3.left) * dir;
                     break;
                 case '&':
                     //Pitch Down
@@ -542,34 +521,9 @@ public class Generator : MonoBehaviour
         {
             for (int i = 1; i < path.Count; i++)
             {
-                Debug.DrawLine(path[i - 1].point, path[i].point);
+                Gizmos.DrawLine(path[i - 1].point, path[i].point);
             }
         }
     }
 }
 
-[CustomEditor(typeof(Generator))]
-public class GeneratorEditor : Editor
-{
-    Generator generator;
-    private void OnEnable()
-    {
-        generator = (Generator)target;
-    }
-    public override void OnInspectorGUI()
-    {
-        DrawDefaultInspector();
-        if (GUILayout.Button("Generate LSystem"))
-        {
-            generator.GenerateLSystem();
-        }
-        if (GUILayout.Button("Generate Path"))
-        {
-            generator.GeneratePath();
-        }
-        if (GUILayout.Button("Generate Mesh"))
-        {
-            generator.GenerateMesh();
-        }
-    }
-}
