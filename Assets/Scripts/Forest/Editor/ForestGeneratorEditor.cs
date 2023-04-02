@@ -1,11 +1,15 @@
 using log4net.Util;
 using UnityEditor;
+using UnityEditor.Rendering;
 using UnityEngine;
 
 [CustomEditor(typeof(ForestGenerator))]
 public class ForestGeneratorEditor : Editor
 {
     ForestGenerator generator;
+
+    bool gridSettingsFoldout;
+
     private void OnEnable()
     {
         generator = (ForestGenerator)target;
@@ -15,14 +19,58 @@ public class ForestGeneratorEditor : Editor
     {
         serializedObject.Update();
 
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("gridCellSize"), new GUIContent("Grid Cell Size"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("gridDimensions"), new GUIContent("Grid Dimensions"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("drawGrid"), new GUIContent("Draw Grid"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("onlyDrawExterior"), new GUIContent("Only Draw Outside Edge"));
+        gridSettingsFoldout = EditorGUILayout.Foldout(gridSettingsFoldout, "Grid Settings");
+        if (gridSettingsFoldout ) 
+        {
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("gridCellSize"), new GUIContent("Grid Cell Size"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("gridDimensions"), new GUIContent("Grid Dimensions"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("drawGrid"), new GUIContent("Draw Grid"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("onlyDrawExterior"), new GUIContent("Only Draw Outside Edge"));
+        }
 
         if (GUILayout.Button("Create Grid"))
         {
             generator.CreateGrid();
+        }
+
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("seed"), new GUIContent("Seed"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("randomizeInitialSeed"), new GUIContent("Randomize Initial Seed?"));
+        var useLSystem = serializedObject.FindProperty("useLSystem");
+        EditorGUILayout.PropertyField(useLSystem, new GUIContent("Generate Using LSystems?"));
+
+        if (useLSystem.boolValue)
+        {
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("lSystems"), new GUIContent("LSystems"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("lSystemGenerator"), new GUIContent("LSystem Generator"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("lSystemTemplate"), new GUIContent("LSystem Template"));
+        }
+        else
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("treeObjects"), new GUIContent("Trees"));
+
+        var placementType = serializedObject.FindProperty("placementType");
+        EditorGUILayout.PropertyField(placementType, new GUIContent("Forest Generation Type"));
+
+        switch (placementType.enumValueFlag)
+        {
+            case 0:
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("objectSpacing"), new GUIContent("Object Spacing"));
+                break;
+            case 1:
+                var useNoiseDensity = serializedObject.FindProperty("useNoiseDensity");
+                EditorGUILayout.PropertyField(useNoiseDensity, new GUIContent("Use Noise For Density"));
+
+                if (useNoiseDensity.boolValue)
+                {
+                }
+                break;
+            default:
+                break;
+        }
+
+        
+        if (GUILayout.Button("Generate Forest"))
+        {
+            generator.GenerateForest();
         }
 
         serializedObject.ApplyModifiedProperties();

@@ -43,13 +43,13 @@ public class Generator : MonoBehaviour
             ruleDictionary.Add(item.Character, item.Transformation);
         }
     }
-    public void Iterate()
+    public string Iterate(string curSystem)
     {
         if (ruleDictionary == null) InitDictionary();
 
         string temp = "";
 
-        foreach (var item in iteratedSystem)
+        foreach (var item in curSystem)
         {
             if (ruleDictionary.ContainsKey(item))
             {
@@ -66,27 +66,38 @@ public class Generator : MonoBehaviour
                 temp += item;
         }
 
-        iteratedSystem = temp;
+        return temp;
     }
 
-    public void GenerateLSystem()
+    public string GenerateLSystem(LSystem l = null)
     {
-        iteratedSystem = lSystem.axiom;
-        baseAngle = lSystem.angle;
+        LSystem sys = null;
+        if (l == null)
+            sys = lSystem;
+        else
+            sys = l;
+
+        string system = sys.axiom;
+        baseAngle = sys.angle;
         InitDictionary();
         for (int i = 0; i < iterations; i++)
         {
-            Iterate();
+            system = Iterate(system);
         }
+        iteratedSystem = system;
+        return system;
     }
     
     float pathStartScale;
     [SerializeField] private float minRotateAngle = 0;
     [SerializeField] private float maxRotateAngle = 180;
     [SerializeField] private float upCorrectAngle = 60;
-    public void GenerateMesh()
+
+    public Mesh GenerateMesh(int seed2, LSystem lSystem, float scale = 1)
     {
-        GenerateLSystem();
+        seed = seed2;
+        Debug.Log(seed);
+        var system = GenerateLSystem(lSystem);
 
         //GeneratePath();
         var dotValue = Easing.Linear(-1, 1, (upCorrectAngle + 180) / 360);
@@ -97,18 +108,18 @@ public class Generator : MonoBehaviour
         #region generateCirclePath
         meshPaths.Add(new List<Circle>());
         tempPaths.Add(new List<Circle>());
-        curScale = radius;
+        curScale = radius * scale;
         pathStartScale = curScale;
 
         int curPath = 0;
         Vector3 dir = Vector3.up;
         Vector3 curPos = Vector3.zero;
 
-        float endScaleModifier = 1 / (radius / endRadiusScale);
+        float endScaleModifier = 1 / ((radius / endRadiusScale) * scale);
 
         Stack<int> tempStack = new Stack<int>();
         tempPaths[curPath].Add(new Circle());
-        foreach (var item in iteratedSystem)
+        foreach (var item in system)
         {
             switch (item)
             {
@@ -152,7 +163,270 @@ public class Generator : MonoBehaviour
         Stack<MeshPathState> previousPath = new Stack<MeshPathState>();
         meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
 
-        foreach (var item in iteratedSystem)
+        foreach (var item in system)
+        {
+            curScale = Easing.Ease(scaleEasingType, pathStartScale * endScaleModifier, pathStartScale, 1.0f - (float)index / tempPaths[curPath].Count);
+            //curLengthScale *= lengthScaleModifier;
+            switch (item)
+            {
+                case 'F':
+                    //Move Forward
+                    curPos += dir * (baseLength * lengthScale * scale);
+                    meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    index++;
+                    break;
+                case '+':
+                    //Turn Left
+                    var t = Quaternion.AngleAxis(Easing.Linear(minRotateAngle, maxRotateAngle, (float)random.NextDouble()), Vector3.up);
+                    dir = Quaternion.AngleAxis(baseAngle + Easing.Linear(-maxAngleOffset, maxAngleOffset, (float)random.NextDouble()), Vector3.left) * t * dir;
+                    break;
+                case '-':
+                    //Turn Right
+                    var te = Quaternion.AngleAxis(-Easing.Linear(minRotateAngle, maxRotateAngle, (float)random.NextDouble()), Vector3.up);
+                    dir = Quaternion.AngleAxis(-baseAngle + Easing.Linear(-maxAngleOffset, maxAngleOffset, (float)random.NextDouble()), Vector3.left) * te * dir;
+                    break;
+                case '&':
+                    //Pitch Down
+                    dir = Quaternion.AngleAxis(baseAngle, Vector3.down) * dir;
+                    break;
+                case '^':
+                    //Pitch Up
+                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.down) * dir;
+                    break;
+                case '\\':
+                    //Roll Left
+                    dir = Quaternion.AngleAxis(-baseAngle, Vector3.forward) * dir;
+                    break;
+                case '/':
+                    //Roll Right
+                    dir = Quaternion.AngleAxis(baseAngle, Vector3.forward) * dir;
+                    break;
+                case '|':
+                    // Turn 180
+                    dir = Quaternion.AngleAxis(180, Vector3.forward) * dir;
+                    break;
+                case '[':
+                    // Start Path
+                    MeshPathState state = new MeshPathState(curPath, new MeshPathNode(curPos, dir, curPath), pathStartScale, lengthScale, index);
+                    previousPath.Push(state);
+                    meshPaths.Add(new List<Circle>());
+                    curPath = meshPaths.Count - 1;
+
+                    curScale *= pathScaleModifier;
+                    pathStartScale = curScale;
+                    index = 1;
+                    meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    break;
+                case ']':
+                    // End Path
+                    MeshPathState s = previousPath.Pop();
+                    curPath = s.PathIndex;
+                    dir = s.MeshPathNode.direction;
+                    curPos = s.MeshPathNode.center;
+                    pathStartScale = s.Scale;
+                    //lengthScale = s.LengthScale;
+                    index = s.Index;
+                    break;
+                default:
+                    if (ignoreCharacters.Contains(item)) break;
+
+                    curPos += dir * (baseLength * lengthScale * scale);
+                    meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+                    index++;
+                    break;
+            }
+            var dot = Vector3.Dot(dir, Vector3.up);
+            if (dot < dotValue)
+            {
+                dir = Quaternion.Euler(dir) * Vector3.Lerp(dir, Vector3.up, (float)random.NextDouble());
+            }
+        }
+
+        #endregion
+
+        //GetCircles(meshPaths);       
+
+        if (meshFilter.sharedMesh == null) meshFilter.sharedMesh = new Mesh();
+
+        var mesh = new Mesh();
+
+        List<Vector3> vertices = new List<Vector3>();
+        List<int> triangles = new List<int>();
+
+        //Add all points from all circles
+        foreach (var path in meshPaths)
+        {
+            foreach (var item in path)
+            {
+                vertices.AddRange(item.points);
+
+                //Give vertex offset to each circle
+                item.offset = vertices.Count - item.points.Count;
+            }
+        }
+
+        // Add Faces For Everything
+        for (int i = 0; i < meshPaths.Count; i++)
+        {
+            for (int j = 0; j < meshPaths[i].Count; j++)
+            {
+                if (j == 0)
+                {
+                    //Temporarily store circle variable
+                    var circle = meshPaths[i][j];
+
+                    //Loop through each point in circle to create end face
+                    for (int k = circle.offset + 1; k < circle.points.Count + circle.offset; k++)
+                    {
+                        //Add Triangle For Each Vertex
+                        triangles.Add(k - 1);
+                        triangles.Add(k);
+                        triangles.Add(circle.offset);
+                    }
+                }
+                else
+                {
+                    var circle = meshPaths[i][j];
+                    var prevCircle = meshPaths[i][j - 1];
+                    var offset = circle.offset;
+                    var prevOffset = prevCircle.offset;
+                    var curCount = circle.points.Count;
+                    var prevCount = prevCircle.points.Count;
+
+
+                    int vertexOffset = 0;
+                    float minDist = float.MaxValue;
+
+                    for (int k = 0; k < prevCircle.points.Count; k++)
+                    {
+                        var d = Vector3.Distance(prevCircle.points[k], circle.points[0]);
+                        if (d < minDist)
+                        {
+                            vertexOffset = k;
+                            minDist = d;
+                        }
+                    }
+
+                    //Loop through each circle to add faces
+                    for (int k = 0; k < curCount - 1; k++)
+                    {
+                        var kOffset = k + vertexOffset;
+                        if (kOffset >= curCount)
+                            kOffset -= curCount;
+
+                        if (k == 0)
+                        {
+                            triangles.Add(offset + curCount - 1);
+                            triangles.Add(offset);
+                            triangles.Add(prevOffset + prevCount - 1);
+
+                            triangles.Add(prevOffset + prevCount - 1);
+                            triangles.Add(offset);
+                            triangles.Add(prevOffset);
+                        }
+
+                        triangles.Add(k + offset);
+                        triangles.Add(k + offset + 1);
+                        triangles.Add(prevOffset + kOffset);
+
+                        triangles.Add(prevOffset + kOffset);
+                        triangles.Add(k + offset + 1);
+                        triangles.Add(prevOffset + 1 + kOffset);
+                    }
+
+                    //If final ring, add outer face
+                    if (j == meshPaths[i].Count - 1)
+                    {
+                        for (int k = offset + 1; k < curCount + offset; k++)
+                        {
+
+                            //Add Triangle For Each Vertex
+                            triangles.Add(offset);
+                            triangles.Add(k);
+                            triangles.Add(k - 1);
+                        }
+                    }
+
+                }
+            }
+        }
+
+        mesh.Clear();
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
+        mesh.RecalculateNormals();
+        return mesh;
+    }
+
+    public void GenerateMesh()
+    {
+        var system = GenerateLSystem();
+
+        //GeneratePath();
+        var dotValue = Easing.Linear(-1, 1, (upCorrectAngle + 180) / 360);
+        var meshPaths = new List<List<Circle>>();
+        var tempPaths = new List<List<Circle>>();
+        System.Random random = new System.Random(seed);
+
+        #region generateCirclePath
+        meshPaths.Add(new List<Circle>());
+        tempPaths.Add(new List<Circle>());
+        curScale = radius;
+        pathStartScale = curScale;
+
+        int curPath = 0;
+        Vector3 dir = Vector3.up;
+        Vector3 curPos = Vector3.zero;
+
+        float endScaleModifier = 1 / (radius / endRadiusScale);
+
+        Stack<int> tempStack = new Stack<int>();
+        tempPaths[curPath].Add(new Circle());
+        foreach (var item in system)
+        {
+            switch (item)
+            {
+                case 'F':
+                    tempPaths[curPath].Add(new Circle());
+                    break;
+                case '+':
+                    break;
+                case '-':
+                    break;
+                case '&':
+                    break;
+                case '^':
+                    break;
+                case '\\':
+                    break;
+                case '/':
+                    break;
+                case '|':
+                    break;
+                case '[':
+                    // Start Path
+                    tempStack.Push(curPath);
+                    tempPaths.Add(new List<Circle>());
+                    curPath = tempPaths.Count - 1;
+                    tempPaths[curPath].Add(new Circle());
+                    break;
+                case ']':
+                    // End Path                  
+                    curPath = tempStack.Pop();
+                    break;
+                default:
+                    tempPaths[curPath].Add(new Circle());
+                    break;
+            }
+        }
+
+        curPath = 0;
+        int index = 1;
+
+        Stack<MeshPathState> previousPath = new Stack<MeshPathState>();
+        meshPaths[curPath].Add(GetCircle(dir, curPos, curScale, curPath));
+
+        foreach (var item in system)
         {
             curScale = Easing.Ease(scaleEasingType, pathStartScale * endScaleModifier, pathStartScale, 1.0f - (float)index / tempPaths[curPath].Count);
             //curLengthScale *= lengthScaleModifier;
@@ -437,7 +711,7 @@ public class Generator : MonoBehaviour
     //Lastinfirstout collection
     public void GeneratePath()
     {
-        GenerateLSystem();
+        var system = GenerateLSystem();
         System.Random random = new System.Random(seed);
         paths = new List<List<PathNode>>();
         paths.Add(new List<PathNode>());
@@ -450,7 +724,7 @@ public class Generator : MonoBehaviour
 
         paths[curPath].Add(new PathNode(curPos, dir, curPath));
 
-        foreach (var item in iteratedSystem)
+        foreach (var item in system)
         {
             switch (item)
             {
